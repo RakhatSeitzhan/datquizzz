@@ -1,145 +1,213 @@
 import './App.css';
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { database } from './firebase';
-import { ref, set } from "firebase/database";
-
-function writeQuestion(question, answers, correctAnswer) {
-  set(ref(database, 'questions/'), {
-    question: question,
-    answers: answers,
-    correctAnswer, correctAnswer
-  });
-}
+import { ref, set, onValue , update} from "firebase/database";
+import { questions } from './quizzquestions';
+import Login from './Login';
+import LightningIcon from './LightningIcon';
+import MoonIcon from './MoonIcon'
+import ShieldIcon from './ShieldIcon';
+import CakeIcon from './CakeIcon';
+import jiffka from './jiffka.gif';
 function App() {
-  const startQuiz = () => {
-    
-  } 
+  const [userName, setUsername ] = useState('')
+  const [quizz, setquizz] = useState()
+  useEffect(() => {
+    const quizzref = ref(database,'quizz');
+    onValue(quizzref, snapshot => {
+      const data = snapshot.val();
+      setquizz(data)
+    })
+  }, [])
+  
+  const handleJoin = (name) => {
+    setUsername(name)
+    const userRef = ref(database, `users/${name}`)
+    set(userRef, {
+      lastResult: 0
+    });
+  }
   return (
     <div className="App">
-      <MakeQuestion/>
+      {!quizz?.start && userName != '' && <TimerAnim></TimerAnim>}
+      {userName == '' && <Login handleJoin = {handleJoin}  setUsername = {setUsername}></Login>}
+      {quizz?.start && <Quiz userName={userName} quizz = {quizz}></Quiz>}
+
     </div>
   );
 }
 
-function MakeQuestion(){
-  const [question, setQuestion] = useState('')
-  const [answers, setAnswers] = useState(['','','',''])
-  const [correct, setCorrect] = useState('')
-  const updateAnswers = (e, index) => {
-    let temp = [...answers]
-    temp[index] = e.target.value
-    setAnswers(temp)
+function Quiz({quizz, userName}){
+  const [current, _setCurrent] = useState(0)
+
+  const m = <MoonIcon></MoonIcon>
+  const l = <LightningIcon></LightningIcon>
+  const c = <CakeIcon></CakeIcon>
+  const s = <ShieldIcon></ShieldIcon>
+  const icons = [m,l,c,s]
+  const currentRef = useRef(current)
+  const setCurrent = (newval) => {
+    _setCurrent(newval)
+    currentRef.current = newval
   }
-  const uploadQuestion =  () => {
-    writeQuestion(question, answers, correct)
-    console.log(question, answers, correct)
+  const timePerQuestion = 15 * 1000
+  const timeBetween = 5 * 1000
+  const [ show, setShow ] = useState(false)
+  const [end, setEnd ] = useState(false)
+  useEffect(() => {
+    let interval2
+    setTimeout(() => {
+      setShow(true)
+      interval2 = setInterval(() => {
+        setShow(true)
+      },  timeBetween + timePerQuestion)
+    }, timePerQuestion)
+    const interval = setInterval(() => {
+      if (currentRef.current < questions.length-1){
+        setCurrent(currentRef.current+1)
+        setBlock(false)
+        setShow(false)
+      }
+    }, timePerQuestion+timeBetween)
+    setTimeout(() => {
+      setEnd(true)
+      submitResults()
+    }, questions.length * timeBetween + questions.length * timePerQuestion)
+    
+    
+    return () => {
+      clearInterval(interval)
+      clearInterval(interval2)
+    }
+    
+  }, [])
+
+  const results = useRef(0)
+  const [block, setBlock] = useState(false) 
+  const handlePressAnwer = (index, ans) => {
+    if (questions[index].correct == ans) results.current = results.current+1
+    setBlock(true)
+    setChosen(ans)
   }
+  const submitResults = () => {
+    const userRef = ref(database, `users/${userName}`)
+    const updates = {};
+    updates['lastResult'] = results.current;
+    update(userRef, updates);
+  }
+  const [chosen, setChosen] = useState()
+  return (
+    <div>
+      {!end && 
+        <div className="container">
+        <div className="card mt-4">
+          {!show && <ProgressBar></ProgressBar>}
+          <div className="card-body bg-light">
+            <div className="card-title" style={{fontWeight: 'bold', padding: '10px'}}><small className="text-body-secondary">kz: </small>{questions[current].question}</div>
+            <div className="card-title" style={{fontWeight: 'bold', padding: '10px'}}><small className="text-body-secondary">ru: </small>{questions[current].questionru}</div>
+            {!show &&
+              <div className="row">
+              {questions[current].answers.map((answer, answerIndex) => (
+                <div key={answerIndex} className="col-md-6 mb-2">
+                  <button
+                  disabled = {block} 
+                  onClick={e => handlePressAnwer(current, answer)}
+                    type="button"
+                    style={{
+                      width: '100%',
+                      height: '120px',
+                      borderRadius: '10px',
+                      backgroundColor: ['#dc3545', '#0d6efd', '#ffc107', '#198754'][answerIndex % 4],
+                      fontWeight: 'bold',
+                      boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.2)',
+                      color:'white',
+                      fontSize:'1.5rem'
+                    }}
+                    className="btn btn-outline-light flex items-center content-center"
+                  >
+                    {icons[answerIndex%4]}
+                    {answer}
+                  </button>
+                </div>
+              ))}
+            </div>
+            }
+            {show && 
+            <div style={{display:'flex',height:'5rem', flexDirection:'column',width: '70%', margin:'auto 0px',}}>
+              {questions[current].correct == chosen ? 
+              <div style = {{fontSize:'1.5rem',background: 'green', color:'white'}}>От души родной ты ответил правильно я в тебя верил! Правильный ответ:{questions[current].correct}</div>
+              : 
+              <div style = {{fontSize:'1.5rem',background: 'red',  color:'white'}}>НЕПРАВИЛЬНО! Правильный ответ это: {questions[current].correct}</div> 
+              }
+            </div>}
+          </div>
+        </div>
+    </div>
+    }
+    {end && <Results></Results>}
+    
+  </div>)
+}
+
+function Results(){
+  const [ users, setUsers ] = useState([])
+  useEffect(() => {
+    const usersRef = ref(database, 'users')
+    onValue(usersRef, snapshot => {
+      const data = snapshot.val()
+      let temp =  Object.keys(data).map(key => ({name: key, lastResult: data[key].lastResult}))
+      temp.sort((a, b) => b.lastResult - a.lastResult);
+      setUsers(temp)
+    })
+  },[])
   return (
   <div>
-    <input placeholder='question' value = {question} onChange={e => setQuestion(e.target.value)} />
-    {answers.map((ans, index) => <input placeholder={`asnwer #${index+1}`} onChange={e => updateAnswers(e, index)} key = {index} value={ans}/>)}
-    <input placeholder='correct answer' value={correct} onChange={e => setCorrect(e.target.value)}/>
-    <button onClick={uploadQuestion}>Submit</button>
+    <div>
+      <h2 style={{color:'gold'}}>First place</h2>
+      <h1>{users[0]?.name}</h1>
+    </div>
+    <div>
+      <h2 style={{color:'silver'}}>Second place</h2>
+      <h1>{users[1]?.name}</h1>
+    </div>
+    <div>
+      <h2 style={{color:'bronze'}}>Third place</h2>
+      <h1>{users[2]?.name}</h1>
+    </div>
   </div>
   )
 }
-
-function Quiz(){
-  const questions = [
-    {
-      question: 'Наурыздың екінші атауы қандай?/Как по другому называют праздник Наурыз?',
-      answers: [
-        'Ұлыстың ұлы түні',
-        'Ұлыстың ұлы күні',
-        'Ұлыс ұлының ұлы күні',
-        'Ұлдың ұлыс күні'
-      ],
-      correct: 'Ұлыстың ұлы күні'
-    },
-    {
-      question: 'Наурыз мейрамы екі сөзден құралған "нау" және "рыз". Олардың парсы тілінен аудармасы қандай?/Праздник Наурыз составное из двух слов "нау" и "рыз". Каков их перевод от фарси?  ',
-      answers: [
-        'ай-күн/луна-солнце',
-        'ұлыс-күн/народ-день',
-        'түн-күн/ночь-день',
-        'жаңа-күн/новый-день'
-      ],
-      correct: 'жаңа-күн/новый-день'
-    },
-    {
-      question: 'Қай елдерде (2 жауап) Наурыз мейрамы дымалыс күндері емес?/В каких странах (2 ответа) Наурыз не является выходным днем?',
-      answers: [
-        'Иран',
-        'Ауғанстан/Афганистан',
-        'Пәкістан/Пакистан',
-        'Әзірбайжан/Азербайджан'
-      ],
-      correct: 'Пәкістан/Пакистан'
-    },
-    {
-      question: 'Наурыз мейрамын ҚСРО кезінде реабилитацияны қалаған кім?/Кто инициировал реабилитацию Наурыза во времена СССР?',
-      answers: [
-        'Нұрсұлтан Назарбаев',
-        'Мұхтар Шаханов',
-        'Шерхан Мұртаза',
-        'Дінмұхамед Қонаев'
-      ],
-      correct: 'Мұхтар Шаханов'
-    },
-    {
-      question: 'Наурыз көже неше заттан жасалады?/Сколько продуктов входит в состав Наурыз коже?',
-      answers: [
-        '5',
-        '6',
-        '7',
-        '8'
-      ],
-      correct: '7'
-    },
-    {
-      question: 'Алтыбақан деген не?/Что такое Алтыбакан?',
-      answers: [
-        'Алты-түбі карусель/Шести-сторонная карусель',
-        'Алты-сырық әткеншек/Шести-шестовая качель',
-        'Алты-бақта ойналатын тығылмақ/Прятки на территории шести садов',
-        'Алты адамнан алты бата алу/Получение шести благословления от шести человек'
-      ],
-      correct: 'Алты-сырық әткеншек/Шести-шестовая качель'
-    },
-    {
-      question: 'Әдетте Наурызда дастарханха не қойылмайды?/Обычно что не ставится на стол во время Наурыза?',
-      answers: [
-        'Тоқаштар/Булочки',
-        'Кәмпиттер/Конфеты',
-        'Көкөністер/Овощи',
-        'Құрт/Курт'
-      ],
-      correct: 'Көкөністер/Овощи'
-    },
-    {
-      question: 'Наурыздың "бес игі іс"-ке не жатпайды (2 жауап)?/Что не входит в "пять благих обрядов" (2 ответа)?',
-      answers: [
-        'Үлкен кісілерге барып амандасу/Сходить и поприветствовать старших',
-        'Ренжіткен адамнан кешірім сұрау/Попросить прощения у обиженных тобой людей',
-        'Көрісу/Справиться о состоянии родственников которые живут далеко',
-        'Жетімдерге көмек ету/Помочь сиротам'
-      ],
-      correct: 'Көрісу/Справиться о состоянии родственников которые живут далеко'
-    },
-    {
-      question: 'Наурыз көже неше заттан жасалады?/Сколько продуктов входит в состав Наурыз коже?',
-      answers: [
-        '5',
-        '6',
-        '7',
-        '8'
-      ],
-      correct: '7'
-    },
-  ]
+const ProgressBar = () => {
   return (
-  <div>
-
-  </div>)
+    <div style={{ width: '100%', backgroundColor: '#ccc', height: '20px' }}>
+      <div
+        style={{
+          // width: `${progress}%`,
+          backgroundColor: 'green',
+          height: '100%',
+          transition: 'width 1s linear' // Smooth transition animation
+        }} 
+        className='progressbar'
+      />
+    </div>
+  );
+};
+function TimerAnim(){
+  return (
+      <div>
+        <div id="rax">
+    <button id="at" class="btn btn-primary" type="button" disabled>
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      <span role="status">Loading...</span>
+    </button>
+        </div>
+        <div id="silver" class="text-primary">
+          подождите пока все не загрузятся :0
+        </div>
+        <div>
+          <img src={jiffka}></img>
+        </div>
+      </div>
+  )
 }
 export default App;

@@ -13,19 +13,42 @@
   }
 }
 
+#rax {
+  display: flex;
+  justify-content: center; /* horizontally center */
+  align-items: center; /* vertically center, if needed */
+}
+#at {
+  margin: 10vh;
+  width: 30vh;
+  height: 10vh;
+  border-radius: 45;
+}
+
+#silver {
+  font-weight: bold;
+  font-size: 20;
+}
+
+#kek {
+  display: flex;
+  justify-content: center; /* horizontally center */
+  align-items: center; /* vertically center, if needed */
+}
+
 .App-header {
-  background-color: #282c34;
+  background-color: #282c34 white !important;;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   font-size: calc(10px + 2vmin);
-  color: white;
+  color: white !important;
 }
 
 .App-link {
-  color: #61dafb;
+  color: #61dafb white !important;;
 }
 
 @keyframes App-logo-spin {
@@ -34,5 +57,18 @@
   }
   to {
     transform: rotate(360deg);
+  }
+}
+.progressbar{
+  animation: progress;
+  animation-duration: 15s;
+  animation-timing-function: linear;
+}
+@keyframes progress {
+  0%{
+    width: 100vw;
+  }
+  100%{
+    width: 0vw;
   }
 }
